@@ -16,33 +16,44 @@ $constituency_names = { 1 => 'Sirpur', 2 => 'Chennur', 3 => 'Bellampalli', 4 => 
 def getresponse
   $party_sums = Hash.new(0)
   $s29_chart_data = []
-  response = Net::HTTP.get(Api_url)
   puts '>Calling API'
-  parsed_data = JSON.parse(response)
-  puts ">Fetched response data for Telangana, last checked #{Time.now.strftime('%d-%m-%Y %I:%M:%S %p')}"
-  $s29_chart_data = parsed_data['S29']['chartData']
-  $s29_chart_data.each do |chart_array|
-    cleaned_chart_array = chart_array.reject do |item|
-                            item.is_a?(String) && item.empty? || item == 'S29'
-                          end.map do |item|
-      if item.is_a?(String)
-        item.gsub(/#.*$/, '').gsub(
-          'BHRS', 'BRS'
-        )
-      else
-        item
-      end
+  http = Net::HTTP.new(Api_url.host, Api_url.port)
+  http.use_ssl = true
+  request = Net::HTTP::Get.new(Api_url)
+  request['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+
+  begin
+    response = http.request(request)
+    if response.code != '200'
+      puts "Error: HTTP #{response.code}"
+      exit
     end
-    $party_sums[cleaned_chart_array[0]] += 1
+
+    parsed_data = JSON.parse(response.body)
+    puts ">Fetched response data for Telangana, last checked #{Time.now.strftime('%d-%m-%Y %I:%M:%S %p')}"
+    $s29_chart_data = parsed_data['S29']['chartData']
+    $s29_chart_data.each do |chart_array|
+      cleaned_chart_array = chart_array.reject do |item|
+                              item.is_a?(String) && item.empty? || item == 'S29'
+                            end.map do |item|
+        if item.is_a?(String)
+          item.gsub(/#.*$/, '').gsub(
+            'BHRS', 'BRS'
+          )
+        else
+          item
+        end
+      end
+      $party_sums[cleaned_chart_array[0]] += 1
+    end
+    sorted_party_sums = $party_sums.sort_by { |_party, sum| sum }.reverse.to_h
+    puts '---Total Party Wise Results---'.ljust(30)
+    sorted_party_sums.each do |party, sum|
+      replaced_party_name = $party_mapping[party] || party
+      puts "#{replaced_party_name.ljust(40)} \t #{sum}"
+    end
+    puts 'Total'.ljust(49) + $party_sums.values.sum.to_s
   end
-  sorted_party_sums = $party_sums.sort_by { |_party, sum| sum }.reverse.to_h
-  sorted_party_sums.values.sum
-  puts '---Total Party Wise Results---'.ljust(30)
-  sorted_party_sums.each do |party, sum|
-    replaced_party_name = $party_mapping[party] || party
-    puts "#{replaced_party_name.ljust(40)} \t #{sum}"
-  end
-  puts 'Total'.ljust(49) + $party_sums.values.sum.to_s
 end
 
 def constiwise
